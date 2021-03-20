@@ -1,5 +1,7 @@
 package cs245.as3;
 
+import java.io.ByteArrayOutputStream;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 
@@ -19,6 +21,48 @@ import cs245.as3.interfaces.StorageManager.TaggedValue;
  * You can assume that the constructor and initAndRecover() are both called before any of the other methods.
  */
 public class TransactionManager {
+	class Record {
+		byte recType;
+		byte valSize;
+		long txId;
+		long key;
+		ByteBuffer val;
+
+		public Record(int recType, long txId) {
+			this.recType = (byte) recType;
+			this.valSize = 0;
+			this.txId = txId;
+			this.key = 0;
+			this.val = null;
+		}
+
+		public Record(byte recType, long txId, long key, byte[] val) {
+			this.recType = recType;
+			this.valSize = (byte) val.length;
+			this.txId = txId;
+			this.key = key;
+			this.val = java.nio.ByteBuffer.wrap(val);
+		}
+
+		public Record(ByteBuffer slice) {
+			this.recType = slice.get();
+			this.valSize = slice.get();
+			this.txId = slice.getLong();
+			this.key = slice.getLong();
+			this.val = slice.slice();
+		}
+
+		public byte[] asByteArray() {
+			ByteBuffer result = java.nio.ByteBuffer.allocate(18 + this.valSize);
+			result.put(this.recType);
+			result.put(this.valSize);
+			result.putLong(this.txId);
+			result.putLong(this.key);
+			result.put(this.val.array());
+			return result.array();
+		}
+	}
+
 	class WritesetEntry {
 		public long key;
 		public byte[] value;
@@ -36,8 +80,13 @@ public class TransactionManager {
 	  */
 	private HashMap<Long, ArrayList<WritesetEntry>> writesets;
 
+	private HashMap<Long, Record> writerecsets;
+	private LogManager lm;
+
 	public TransactionManager() {
 		writesets = new HashMap<>();
+		writerecsets = new HashMap<>();
+		lm = null;
 		//see initAndRecover
 		latestValues = null;
 	}
@@ -48,13 +97,15 @@ public class TransactionManager {
 	 */
 	public void initAndRecover(StorageManager sm, LogManager lm) {
 		latestValues = sm.readStoredTable();
+		this.lm = lm;
 	}
 
 	/**
 	 * Indicates the start of a new transaction. We will guarantee that txID always increases (even across crashes)
 	 */
 	public void start(long txID) {
-		// TODO: Not implemented for non-durable transactions, you should implement this
+		lm.appendLogRecord(new Record(0,  txID).asByteArray());
+		writerecsets.put(txID, new Record(0, txID));
 	}
 
 	/**
